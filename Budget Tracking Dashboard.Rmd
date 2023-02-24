@@ -1,0 +1,106 @@
+---
+title: "Timothy's Budget Tracker Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE, message = FALSE}
+pacman::p_load(flexdashboard, tidyverse, googlesheets4, shiny, devtools, tvthemes, webr)
+
+month <- "AUG"
+year <- "2022"
+date <- paste0(month, "_", year)
+
+# Set authentication token to be stored in a folder called `.secrets`
+options(gargle_oauth_cache = ".secrets")
+
+# Authenticate manually
+gs4_auth()
+
+# If successful, the previous step stores a token file.
+# Check that a file has been created with:
+list.files(".secrets/")
+
+# Check that the non-interactive authentication works by first deauthorizing:
+gs4_deauth()
+
+# Authenticate using token. If no browser opens, the authentication works.
+gs4_auth(cache = ".secrets", email = "timothylth93@gmail.com")
+
+# gs4_auth(email = "timothylth93@gmail.com")
+
+df <- read_sheet("https://docs.google.com/spreadsheets/d/1jRLGZJEnVwLVAwUo3q0MU9FQpNoZa_f7LQNl0PIhmUk/edit#gid=0", sheet = date)
+
+df_summary <- df |> 
+  group_by(Category, `Sub-category`) |> 
+  summarise(n = sum(Amount)) 
+  
+```
+
+## Inputs {.sidebar}
+
+```{r}
+# Shiny inputs here
+selectInput(
+  inputId = "month", 
+  label = "Select Target Month:", 
+  choices = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
+  selected = "Jan"
+)
+
+numericInput(inputId = "year", label = "Select Target Year:", value = 2022, min = 2022, max = 2122)
+```
+
+## Row {data-height = 550}
+
+### Spending by Category
+
+```{r}
+df_summary |> 
+  mutate(`Sub-category` = fct_reorder(`Sub-category`, Category)) |> 
+  ggplot(aes(x = `Sub-category`, y = n)) + 
+  geom_col(aes(fill = Category)) + 
+  # Still not sure how this works, but the vjust seems to be the one putting the label at the top of the graph
+  geom_text(aes(label = n), position = position_dodge(width = 1), vjust = -0.5, size = 3) + 
+  scale_x_discrete(drop = FALSE) +
+  ggthemes::theme_clean() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, size = 12),
+        legend.position = "top") + 
+  labs(y = "Amount", x = "Sub-Categories") + 
+  ggthemes::scale_fill_tableau()
+  #scale_fill_westeros(palette = "Stark")
+  
+```
+## Column
+
+### Spending by Sub-Category
+
+```{r}
+pie <- df |> 
+  group_by(Category, `Sub-category`) |> 
+  summarise(n = sum(Amount)) 
+
+PieDonut(data = pie, 
+         aes(Category, Sub-category, count = n),
+         ratioByGroup = FALSE,
+         # Starting point of pie
+         r0 = 0.35,
+         # End point of pie
+         r1 = 0.9,
+         # End point of donut
+         r2 = 1.2
+         ) 
+```
+
+## Row {data-height = 450}
+
+### Total Spending this Month
+
+```{r}
+summed <- sum(df$Amount)
+valueBox(paste0("RM", summed), icon = "fa-pencil")
+```
+
